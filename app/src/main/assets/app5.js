@@ -1,10 +1,6 @@
 const PR_APP_NAME='Pedido Rápido';
 const PR_APP_SUB='Bar & Restaurante / 酒吧餐厅点单';
-const PR_THEMES={
-  day:{brand:'#7a4b24',brandDark:'#4b2d16',bg:'#f3f1ed',panel:'#ffffff',green:'#256b52',ink:'#17191c',sub:'#72767b',line:'#e4ded6',soft:'#f2ede6'},
-  night:{brand:'#c69a63',brandDark:'#e2bd8a',bg:'#101215',panel:'#1b1e22',green:'#3f9b79',ink:'#f5f1ea',sub:'#a8adb3',line:'#343940',soft:'#272b30'}
-};
-let themeMode=(storeGet(THEME_KEY)==='night')?'night':'day';
+const PR_THEME={brand:'#7a4b24',brandDark:'#4b2d16',bg:'#f3f1ed',panel:'#ffffff',green:'#256b52',ink:'#17191c',sub:'#72767b',line:'#e4ded6',soft:'#f2ede6'};
 
 function rebuildMaps(){
   byId=Object.fromEntries(products.map(p=>[p.id,p]));
@@ -16,24 +12,50 @@ function rebuildMaps(){
 rebuildMaps();
 
 function applyAppearance(){
-  theme={...PR_THEMES[themeMode]};
-  const r=document.documentElement;
-  r.dataset.theme=themeMode;
+  theme={...PR_THEME};
+  storeRemove(THEME_KEY);storeRemove(PROFILE_KEY);
+  const r=document.documentElement;r.removeAttribute('data-theme');
   const map={brand:'--brand',brandDark:'--brandDark',bg:'--bg',panel:'--panel',green:'--green',ink:'--ink',sub:'--sub',line:'--line',soft:'--soft'};
   Object.entries(theme).forEach(([k,v])=>{if(map[k])r.style.setProperty(map[k],v)});
   document.title=PR_APP_NAME;
-  const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',themeMode==='night'?'#101215':'#f3f1ed');
+  const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content','#f3f1ed');
   if($('headerBrand')){$('headerBrand').firstChild.textContent=PR_APP_NAME;if($('headerSub'))$('headerSub').textContent=PR_APP_SUB}
-  if($('headerAvatar')){$('headerAvatar').innerHTML='<span>PR</span>'}
-  document.querySelectorAll('[data-theme-mode]').forEach(b=>b.classList.toggle('selected',b.dataset.themeMode===themeMode));
+  if($('headerAvatar'))$('headerAvatar').innerHTML='<span>PR</span>';
+}
+function applyPreset(){applyAppearance()}
+function saveAppearance(){applyAppearance()}
+function resetAppearance(){applyAppearance()}
+
+function fillCategorySelect(selected){
+  const el=$('editCat');if(!el)return;
+  let list=[...categories];
+  if(selected&&!list.includes(selected))list.unshift(selected);
+  el.innerHTML=list.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  el.value=(selected&&list.includes(selected))?selected:(list[0]||'');
 }
 
-function applyPreset(name){
-  if(name!=='day'&&name!=='night')return;
-  themeMode=name;storeSet(THEME_KEY,name);applyAppearance();toast(name==='day'?'Modo día / 白天模式':'Modo noche / 夜间模式');
+function openProductEditor(id){
+  editingProductId=id||null;
+  const p=id?byId[id]:{id:'custom_'+Date.now(),es:'',zh:'',cat:activeCat||categories[0],kind:'food',fit:'cover',img:''};
+  $('editorTitle').textContent=id?'Editar producto / 编辑商品':'Nuevo producto / 新增商品';
+  $('editEs').value=p.es||'';$('editZh').value=p.zh||'';fillCategorySelect(p.cat||categories[0]);
+  $('editKind').value=p.kind||'food';$('editFit').value=p.fit||'cover';$('editPreview').src=p.img||'';
+  $('editPreviewBox').classList.toggle('cover',(p.fit||'cover')==='cover');$('deleteProduct').style.visibility=id?'visible':'hidden';
+  $('editorModal').classList.add('open');$('editImageFile').value='';$('editPreview').dataset.newimg='';
 }
-function saveAppearance(){applyAppearance()}
-function resetAppearance(){themeMode='day';storeSet(THEME_KEY,'day');applyAppearance()}
+
+function saveProductFromEditor(){
+  const es=$('editEs').value.trim(),zh=$('editZh').value.trim(),cat=$('editCat').value.trim();
+  if(!es||!cat){toast('请填写名称并选择分类 / Completa nombre y categoría');return}
+  if(editingProductId){
+    const p=byId[editingProductId];if(!p)return;
+    Object.assign(p,{es,zh,cat,kind:$('editKind').value,fit:$('editFit').value});
+    if($('editPreview').dataset.newimg)p.img=$('editPreview').dataset.newimg;
+  }else{
+    const id='custom_'+Date.now();products.push({id,es,zh,cat,kind:$('editKind').value,fit:$('editFit').value,img:$('editPreview').dataset.newimg||''});
+  }
+  saveProducts();closeEditor();toast('菜单已保存 / Menú guardado');
+}
 
 function renderCategoryManager(){
   const root=$('categoryManagerList');if(!root)return;
@@ -45,11 +67,12 @@ function renderCategoryManager(){
 function openCategoryManager(){renderCategoryManager();$('categoryModal').classList.add('open')}
 function closeCategoryManager(){$('categoryModal').classList.remove('open')}
 function renameCategoryRow(row){
-  const old=row.dataset.cat;const es=row.querySelector('[data-cat-es]').value.trim();const zh=row.querySelector('[data-cat-zh]').value.trim();
+  const old=row.dataset.cat,es=row.querySelector('[data-cat-es]').value.trim(),zh=row.querySelector('[data-cat-zh]').value.trim();
   if(!es){toast('请填写西语分类名 / Escribe el nombre');return}
   const next=zh?`${es} / ${zh}`:es;if(next===old)return;
   if(categories.includes(next)&&next!==old&&!confirm('Esta categoría ya existe. ¿Fusionar? / 该分类已存在，是否合并？'))return;
-  products.forEach(p=>{if(p.cat===old)p.cat=next});if(activeCat===old)activeCat=next;saveProducts();renderCategoryManager();toast('分类名称已修改 / Categoría actualizada');
+  products.forEach(p=>{if(p.cat===old)p.cat=next});if(activeCat===old)activeCat=next;
+  saveProducts();renderCategoryManager();toast('分类名称已修改 / Categoría actualizada');
 }
 function moveCategoryGroup(index,d){
   const j=index+d;if(index<0||j<0||j>=categories.length)return;
