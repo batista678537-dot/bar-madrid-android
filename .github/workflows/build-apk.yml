@@ -22,6 +22,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Install Android SDK packages
         run: yes | sdkmanager --licenses >/dev/null || true && sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
@@ -35,12 +37,12 @@ jobs:
         run: gradle --no-daemon assembleDebug
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk BarMadrid.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Pedido-Rapido.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BarMadrid-APK
-          path: BarMadrid.apk
+          name: Pedido-Rapido-APK
+          path: Pedido-Rapido.apk
           if-no-files-found: error
           retention-days: 30
